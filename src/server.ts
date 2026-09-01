@@ -28,7 +28,7 @@ server.registerTool(
     inputSchema: {
       html: z
         .string()
-        .describe("Complete, self-contained HTML document (with inline <style>) for the slide"),
+        .describe("Complete, self-contained HTML document (with inline CSS in a style block) for the slide"),
       outputPath: z
         .string()
         .optional()
