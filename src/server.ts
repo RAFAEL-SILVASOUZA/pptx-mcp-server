@@ -34,18 +34,33 @@ server.registerTool(
   {
     title: "Convert HTML to PPTX (creates the actual presentation file)",
     description:
-      "THE DELIVERABLE TOOL. You must have already written a complete HTML file (following " +
-      "get_pptx_authoring_guide's contract) to the workspace yourself — this tool does not " +
-      "render, design, or screenshot anything. It loads that HTML file in a headless browser " +
-      "only to read exact positions/styles of elements you marked with data-pptx attributes, " +
-      "and writes a native, editable .pptx built from those elements (text boxes, shapes, " +
-      "pictures — never a flattened image). Call this once the HTML is finished; the result " +
-      "includes the saved file path and any warnings about elements that didn't convert " +
-      "cleanly.",
+      "THE DELIVERABLE TOOL. You must have already written the presentation as HTML " +
+      "(following get_pptx_authoring_guide's contract) to the workspace yourself — this tool " +
+      "does not render, design, or screenshot anything. It loads your HTML in a headless " +
+      "browser only to read exact positions/styles of elements you marked with data-pptx " +
+      "attributes, and writes a native, editable .pptx built from those elements (text boxes, " +
+      "shapes, pictures — never a flattened image). Two ways to provide the HTML: a single " +
+      "file containing all [data-pptx-slide] sections (htmlPath), or one file per slide in " +
+      "deck order (htmlPaths) — pick whichever htmlPath/htmlPaths param fits what you wrote. " +
+      "Call this once the HTML is finished; the result includes the saved file path and any " +
+      "warnings about elements or files that didn't convert cleanly.",
     inputSchema: {
       htmlPath: z
         .string()
-        .describe("Absolute path to the single HTML file to convert (written earlier by you)"),
+        .optional()
+        .describe(
+          "Absolute path to a single HTML file containing the whole deck (one or more " +
+            "[data-pptx-slide] elements, in DOM order). Use this OR htmlPaths, not both."
+        ),
+      htmlPaths: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Ordered list of absolute paths, one HTML file per slide (each with its own " +
+            "[data-pptx-slide] root, optionally sharing styling via a relative <link> to a " +
+            "common CSS file). Slide order in the output follows this array's order, not " +
+            "filenames. Use this OR htmlPath, not both."
+        ),
       outputPath: z
         .string()
         .optional()
@@ -56,23 +71,36 @@ server.registerTool(
         ),
     },
   },
-  async ({ htmlPath, outputPath }) => {
-    const resolvedHtmlPath = path.resolve(htmlPath);
-    if (!fs.existsSync(resolvedHtmlPath)) {
+  async ({ htmlPath, htmlPaths, outputPath }) => {
+    const requestedPaths =
+      htmlPaths && htmlPaths.length > 0 ? htmlPaths : htmlPath ? [htmlPath] : [];
+    if (requestedPaths.length === 0) {
       return {
         isError: true,
-        content: [{ type: "text", text: `HTML file not found: ${resolvedHtmlPath}` }],
+        content: [{ type: "text", text: "Provide either htmlPath or htmlPaths." }],
       };
     }
 
-    const slides = await extractPresentation(resolvedHtmlPath);
+    const resolvedHtmlPaths = requestedPaths.map((p) => path.resolve(p));
+    const missing = resolvedHtmlPaths.filter((p) => !fs.existsSync(p));
+    if (missing.length > 0) {
+      return {
+        isError: true,
+        content: [
+          { type: "text", text: `HTML file(s) not found:\n${missing.join("\n")}` },
+        ],
+      };
+    }
+
+    const { slides, warnings: extractWarnings } = await extractPresentation(resolvedHtmlPaths);
     const resolvedOutputPath = await resolveOutputPath(
       server.server,
       outputPath,
       `apresentacao-${Date.now()}.pptx`
     );
 
-    const result = await convertHtmlToPptx(slides, resolvedHtmlPath, resolvedOutputPath);
+    const result = await convertHtmlToPptx(slides, resolvedOutputPath);
+    result.warnings = [...extractWarnings, ...result.warnings];
 
     const lines = [`PPTX gerado com ${result.slideCount} slide(s) em: ${result.outputPath}`];
     if (result.warnings.length > 0) {

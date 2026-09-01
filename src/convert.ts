@@ -20,13 +20,12 @@ export interface ConvertResult {
 
 export async function convertHtmlToPptx(
   slides: ExtractedSlide[],
-  htmlPath: string,
   outputPath: string
 ): Promise<ConvertResult> {
   const warnings: string[] = [];
   if (slides.length === 0) {
     warnings.push(
-      "No element with [data-pptx-slide] was found in the HTML file — the output .pptx has 0 slides."
+      "No element with [data-pptx-slide] was found in the HTML file(s) — the output .pptx has 0 slides."
     );
   }
 
@@ -36,8 +35,6 @@ export async function convertHtmlToPptx(
   const heightIn = first ? first.heightPx / PX_PER_INCH : 7.5;
   pres.defineLayout({ name: "CUSTOM", width: widthIn, height: heightIn });
   pres.layout = "CUSTOM";
-
-  const htmlDir = path.dirname(htmlPath);
 
   for (let i = 0; i < slides.length; i++) {
     const extracted = slides[i];
@@ -65,7 +62,7 @@ export async function convertHtmlToPptx(
         continue;
       }
       try {
-        await addItemToSlide(pptxSlide, item, htmlDir, warnings, i + 1);
+        await addItemToSlide(pptxSlide, item, extracted.sourceDir, warnings, i + 1);
       } catch (err: any) {
         warnings.push(
           `Slide ${i + 1}: a [data-pptx="${item.type}"] element failed to convert and was ` +

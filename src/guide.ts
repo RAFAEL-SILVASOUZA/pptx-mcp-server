@@ -1,26 +1,51 @@
 export const AUTHORING_GUIDE = `# How to build a presentation for pptx-mcp-server
 
-You (the calling agent) write the ENTIRE presentation yourself as a plain HTML file
-(optionally with a separate CSS file and local images alongside it) directly in the
-user's workspace. This server does not render, screenshot, or design anything — it
-loads your HTML in a real browser purely to read back exact positions and computed
-styles, then converts what you marked into native, editable PowerPoint objects
-(text boxes, shapes, pictures). No image is ever embedded as a whole-slide
-background. Layout freedom (CSS: flexbox, grid, absolute positioning, custom fonts,
-any styling you like) is total — the only requirement is a small markup contract so
-the converter knows WHICH elements become WHAT in the final .pptx.
+You (the calling agent) write the ENTIRE presentation yourself as plain HTML —
+either one file for the whole deck, or one file per slide sharing a CSS file — plus
+any local images, directly in the user's workspace. This server does not render,
+screenshot, or design anything — it loads your HTML in a real browser purely to
+read back exact positions and computed styles, then converts what you marked into
+native, editable PowerPoint objects (text boxes, shapes, pictures). No image is
+ever embedded as a whole-slide background. Layout freedom (CSS: flexbox, grid,
+absolute positioning, custom fonts, any styling you like) is total — the only
+requirement is a small markup contract so the converter knows WHICH elements
+become WHAT in the final .pptx.
 
 ## Workflow
 
+There are two ways to structure the HTML — pick whichever fits how you're
+generating the deck.
+
+**Single file** — one \`.html\` file containing every \`[data-pptx-slide]\` section,
+in DOM order:
+
 1. Write one self-contained \`.html\` file (plus any \`.css\`/image files it references
    via relative paths) into the workspace, following the contract below.
-2. Call \`convert_html_to_pptx\` with the absolute path to that HTML file. That's it —
-   the server reads the file, measures it in a headless browser, and writes the
-   \`.pptx\`. There is no preview/screenshot step; iterate by re-reading and re-editing
-   the HTML file yourself.
-3. The tool result includes any warnings (e.g. an element with zero size, an image
-   that couldn't be loaded, a slide sized differently from the first one) — read
-   them and fix the HTML if anything looks wrong, then call the tool again.
+2. Call \`convert_html_to_pptx\` with \`htmlPath\` set to that file's absolute path.
+
+**One file per slide** — an \`.html\` file per slide, each with its own single
+\`[data-pptx-slide]\` root, sharing look-and-feel through a common \`.css\` file each
+one \`<link>\`s to (relative paths resolve per file, so images/CSS can live
+alongside each slide or in a shared folder). This is often more productive when
+generating/editing many slides: you write and fix one focused file at a time
+instead of one large file, and a mistake in one slide can't corrupt the others.
+
+1. Write \`slide-01.html\`, \`slide-02.html\`, ... (plus a shared \`styles.css\` and
+   any images) into the workspace, following the contract below. Every slide file
+   should give its \`[data-pptx-slide]\` element the same pixel size.
+2. Call \`convert_html_to_pptx\` with \`htmlPaths\` set to the ordered array of
+   absolute paths — the array's order is the deck's slide order, independent of
+   filenames.
+
+Either way:
+
+3. The tool reads the file(s), measures them in a headless browser, and writes
+   the \`.pptx\`. There is no preview/screenshot step; iterate by re-reading and
+   re-editing the HTML file(s) yourself.
+4. The tool result includes any warnings (e.g. an element with zero size, an
+   image that couldn't be loaded, a slide sized differently from the first one,
+   a file with no \`[data-pptx-slide]\` found in it) — read them and fix the HTML
+   if anything looks wrong, then call the tool again.
 
 ## The markup contract
 
