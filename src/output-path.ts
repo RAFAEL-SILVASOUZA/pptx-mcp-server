@@ -9,28 +9,27 @@ const FALLBACK_DIR =
     : path.join(os.homedir(), "Documents", "PPT-MCP");
 
 /**
- * Resolves where a .pptx should be written.
+ * Resolves where a file should be written.
  *
  * - If `requested` is an absolute path, it's used as-is.
- * - If `requested` is a bare filename (or omitted), the directory is taken from the
- *   MCP client's first declared "root" (its workspace/project folder) when the client
- *   supports that capability — otherwise falls back to the PPT_MCP_OUTPUT_DIR env var,
- *   or ~/Documents/PPT-MCP if that isn't set either.
+ * - If `requested` is a bare filename (or omitted, falling back to `defaultFilename`), the
+ *   directory is taken from the MCP client's first declared "root" (its workspace/project
+ *   folder) when the client supports that capability — otherwise falls back to the
+ *   PPT_MCP_OUTPUT_DIR env var, or ~/Documents/PPT-MCP if that isn't set either.
  *
  * MCP servers run as their own process and don't inherit the calling agent's working
  * directory; "roots" is the protocol's mechanism for a client to share that folder.
  */
 export async function resolveOutputPath(
   mcpServer: Server,
-  requested: string | undefined
+  requested: string | undefined,
+  defaultFilename: string
 ): Promise<string> {
   if (requested && path.isAbsolute(requested)) {
     return requested;
   }
 
-  const filename = requested && requested.trim().length > 0
-    ? requested
-    : `apresentacao-${Date.now()}.pptx`;
+  const filename = requested && requested.trim().length > 0 ? requested : defaultFilename;
 
   const baseDir = await resolveBaseDir(mcpServer);
   return path.join(baseDir, filename);

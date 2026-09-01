@@ -2,11 +2,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import fs from "node:fs";
+import path from "node:path";
 import { renderHtmlToPng, closeBrowser } from "./render.js";
 import { buildPptx } from "./pptx.js";
 import { resolveOutputPath } from "./output-path.js";
 
-const server = new McpServer({ name: "hjmcp-ppt", version: "0.1.0" });
+const server = new McpServer({ name: "pptx-mcp-server", version: "0.1.1" });
 
 const DEFAULT_WIDTH = 1280;
 const DEFAULT_HEIGHT = 720;
@@ -14,28 +16,42 @@ const DEFAULT_HEIGHT = 720;
 server.registerTool(
   "preview_slide",
   {
-    title: "Preview slide (design check only — does NOT save a file)",
+    title: "Preview slide (design check only — does NOT save a presentation)",
     description:
-      "DESIGN-ITERATION TOOL ONLY. Renders a single complete HTML document to a PNG image " +
-      "and returns it inline for visual review — it does not write anything to disk and is " +
-      "NOT how a presentation gets delivered. Use it only to check how one slide looks while " +
-      "you're still tweaking its HTML/CSS. Once the user's slides are finalized, you MUST call " +
-      "build_pptx to actually produce the .pptx file — that is the only tool that creates a " +
-      "deliverable presentation file.",
+      "DESIGN-ITERATION TOOL ONLY. Renders a single complete HTML document to a PNG image and " +
+      "saves it to disk, returning the file path (not the image data). Open/view that PNG file " +
+      "with whatever image-reading capability your agent has to check the design — this tool " +
+      "does NOT produce a .pptx and is NOT how a presentation gets delivered. Use it only to " +
+      "check how one slide looks while you're still tweaking its HTML/CSS. Once the user's " +
+      "slides are finalized, you MUST call build_pptx to actually produce the .pptx file — that " +
+      "is the only tool that creates a deliverable presentation file.",
     inputSchema: {
       html: z
         .string()
         .describe("Complete, self-contained HTML document (with inline <style>) for the slide"),
+      outputPath: z
+        .string()
+        .optional()
+        .describe(
+          "Where to save the preview PNG. Absolute path recommended. If a bare filename or " +
+            "nothing is given, it's saved in the client's workspace root (if the client shares " +
+            "one) or in a configured default folder otherwise."
+        ),
       width: z.number().int().positive().optional().describe("Slide width in px (default 1280)"),
       height: z.number().int().positive().optional().describe("Slide height in px (default 720)"),
     },
   },
-  async ({ html, width, height }) => {
-    // Rendered at 1x (not the 2x used for the final pptx) to keep the inline
-    // base64 payload small — this is a quick visual check, not the deliverable.
-    const png = await renderHtmlToPng(html, width ?? DEFAULT_WIDTH, height ?? DEFAULT_HEIGHT, 1);
+  async ({ html, outputPath, width, height }) => {
+    const png = await renderHtmlToPng(html, width ?? DEFAULT_WIDTH, height ?? DEFAULT_HEIGHT, 2);
+    const resolvedPath = await resolveOutputPath(
+      server.server,
+      outputPath,
+      `preview-${Date.now()}.png`
+    );
+    fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
+    fs.writeFileSync(resolvedPath, png);
     return {
-      content: [{ type: "image", data: png.toString("base64"), mimeType: "image/png" }],
+      content: [{ type: "text", text: `Preview do slide salvo em: ${resolvedPath}` }],
     };
   }
 );
@@ -70,7 +86,11 @@ server.registerTool(
   async ({ slides, outputPath, width, height }) => {
     const w = width ?? DEFAULT_WIDTH;
     const h = height ?? DEFAULT_HEIGHT;
-    const resolvedPath = await resolveOutputPath(server.server, outputPath);
+    const resolvedPath = await resolveOutputPath(
+      server.server,
+      outputPath,
+      `apresentacao-${Date.now()}.pptx`
+    );
     const pngs: Buffer[] = [];
     for (const html of slides) {
       pngs.push(await renderHtmlToPng(html, w, h));
@@ -100,6 +120,6 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 main().catch((err) => {
-  console.error("Fatal error starting hjmcp-ppt server:", err);
+  console.error("Fatal error starting pptx-mcp-server:", err);
   process.exit(1);
 });

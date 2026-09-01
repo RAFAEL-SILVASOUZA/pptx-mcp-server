@@ -14,14 +14,18 @@ dessa abordagem é fidelidade visual ao design HTML/CSS, não edição posterior
 
 ## Tools expostas
 
-- `preview_slide({ html, width?, height? })` — **só para checagem visual**, não salva arquivo.
-  Renderiza um único slide (1x escala) e devolve a imagem PNG em base64, para iterar no design
-  antes de gerar o arquivo final.
+- `preview_slide({ html, outputPath?, width?, height? })` — **só para checagem visual**, não
+  gera uma apresentação. Renderiza um único slide e grava um PNG em disco, devolvendo apenas o
+  caminho do arquivo (texto, não base64) — abra/veja esse PNG com a capacidade de leitura de
+  imagem do seu agente para conferir o design antes de finalizar.
 - `build_pptx({ slides: string[], outputPath?, width?, height? })` — **a tool que entrega o
-  arquivo**. Renderiza todos os slides (2x escala, mais nítido), em ordem, e grava o `.pptx` em
-  disco.
+  arquivo**. Renderiza todos os slides, em ordem, e grava o `.pptx` em disco.
 
-### Resolução de `outputPath`
+Ambas devolvem só texto (o caminho salvo) — nenhuma injeta imagem em base64 na resposta. Isso
+evita respostas gigantes/ilegíveis e problemas de compatibilidade em harnesses que não renderizam
+bem blocos de conteúdo `type: "image"`.
+
+### Resolução de `outputPath` (em ambas as tools)
 
 1. Caminho absoluto informado → usado diretamente.
 2. Caminho relativo ou omitido → tenta a primeira `root` declarada pelo cliente MCP (se ele
