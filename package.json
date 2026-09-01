@@ -1,0 +1,41 @@
+{
+  "name": "pptx-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP stdio server that renders HTML slides and exports them to a PowerPoint (.pptx) file",
+  "type": "module",
+  "main": "dist/server.js",
+  "bin": {
+    "pptx-mcp-server": "dist/server.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "pptx",
+    "powerpoint",
+    "html-to-pptx",
+    "slides"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/server.js",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "pptxgenjs": "^3.12.0",
+    "playwright": "^1.48.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/node": "^22.7.5"
+  }
+}
