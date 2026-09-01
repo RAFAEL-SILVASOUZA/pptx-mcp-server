@@ -1,11 +1,19 @@
 {
   "name": "pptx-mcp-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP stdio server that renders HTML slides and exports them to a PowerPoint (.pptx) file",
   "type": "module",
   "main": "dist/server.js",
   "bin": {
     "pptx-mcp-server": "dist/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RAFAEL-SILVASOUZA/pptx-mcp-server.git"
+  },
+  "homepage": "https://github.com/RAFAEL-SILVASOUZA/pptx-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/RAFAEL-SILVASOUZA/pptx-mcp-server/issues"
   },
   "files": [
     "dist"
