@@ -64,7 +64,14 @@ export async function convertHtmlToPptx(
         );
         continue;
       }
-      await addItemToSlide(pptxSlide, item, htmlDir, warnings, i + 1);
+      try {
+        await addItemToSlide(pptxSlide, item, htmlDir, warnings, i + 1);
+      } catch (err: any) {
+        warnings.push(
+          `Slide ${i + 1}: a [data-pptx="${item.type}"] element failed to convert and was ` +
+            `skipped (${err?.message || err}).`
+        );
+      }
     }
   }
 
@@ -145,7 +152,7 @@ async function addItemToSlide(
 async function resolveImageAsDataUri(src: string, htmlDir: string): Promise<string | null> {
   try {
     if (src.startsWith("data:")) {
-      return src;
+      return isValidDataUri(src) ? src : null;
     }
     if (src.startsWith("file://")) {
       const filePath = fileURLToPath(src);
@@ -164,6 +171,13 @@ async function resolveImageAsDataUri(src: string, htmlDir: string): Promise<stri
   } catch {
     return null;
   }
+}
+
+function isValidDataUri(src: string): boolean {
+  const m = src.match(/^data:[^;,]+;base64,([\s\S]*)$/);
+  if (!m) return false;
+  const payload = m[1];
+  return payload.length > 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(payload);
 }
 
 function fileToDataUri(filePath: string): string | null {
