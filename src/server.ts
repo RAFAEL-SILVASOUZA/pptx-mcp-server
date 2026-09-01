@@ -4,73 +4,48 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
-import { renderHtmlToPng, closeBrowser } from "./render.js";
-import { buildPptx } from "./pptx.js";
+import { extractPresentation, closeBrowser } from "./render.js";
+import { convertHtmlToPptx } from "./convert.js";
 import { resolveOutputPath } from "./output-path.js";
+import { AUTHORING_GUIDE } from "./guide.js";
 
-const server = new McpServer({ name: "pptx-mcp-server", version: "0.1.1" });
-
-const DEFAULT_WIDTH = 1280;
-const DEFAULT_HEIGHT = 720;
+const server = new McpServer({ name: "pptx-mcp-server", version: "0.2.0" });
 
 server.registerTool(
-  "preview_slide",
+  "get_pptx_authoring_guide",
   {
-    title: "Preview slide (design check only — does NOT save a presentation)",
+    title: "Get PPTX authoring guide (read this first)",
     description:
-      "DESIGN-ITERATION TOOL ONLY. Renders a single complete HTML document to a PNG image and " +
-      "saves it to disk, returning the file path (not the image data). Open/view that PNG file " +
-      "with whatever image-reading capability your agent has to check the design — this tool " +
-      "does NOT produce a .pptx and is NOT how a presentation gets delivered. Use it only to " +
-      "check how one slide looks while you're still tweaking its HTML/CSS. Once the user's " +
-      "slides are finalized, you MUST call build_pptx to actually produce the .pptx file — that " +
-      "is the only tool that creates a deliverable presentation file.",
-    inputSchema: {
-      html: z
-        .string()
-        .describe("Complete, self-contained HTML document (with inline CSS in a style block) for the slide"),
-      outputPath: z
-        .string()
-        .optional()
-        .describe(
-          "Where to save the preview PNG. Absolute path recommended. If a bare filename or " +
-            "nothing is given, it's saved in the client's workspace root (if the client shares " +
-            "one) or in a configured default folder otherwise."
-        ),
-      width: z.number().int().positive().optional().describe("Slide width in px (default 1280)"),
-      height: z.number().int().positive().optional().describe("Slide height in px (default 720)"),
-    },
+      "Returns the full guide for authoring a presentation this server can convert: the " +
+      "HTML markup contract (data-pptx-slide / data-pptx=\"text\"|\"shape\"|\"image\"), how " +
+      "positioning and styling map to native PowerPoint objects, what's unsupported, and " +
+      "design guidance. Call this BEFORE writing any presentation HTML — the conversion is " +
+      "markup-driven, so writing HTML without following this contract will produce an empty " +
+      "or broken .pptx.",
+    inputSchema: {},
   },
-  async ({ html, outputPath, width, height }) => {
-    const png = await renderHtmlToPng(html, width ?? DEFAULT_WIDTH, height ?? DEFAULT_HEIGHT, 2);
-    const resolvedPath = await resolveOutputPath(
-      server.server,
-      outputPath,
-      `preview-${Date.now()}.png`
-    );
-    fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
-    fs.writeFileSync(resolvedPath, png);
-    return {
-      content: [{ type: "text", text: `Preview do slide salvo em: ${resolvedPath}` }],
-    };
+  async () => {
+    return { content: [{ type: "text", text: AUTHORING_GUIDE }] };
   }
 );
 
 server.registerTool(
-  "build_pptx",
+  "convert_html_to_pptx",
   {
-    title: "Build PPTX (creates the actual presentation file)",
+    title: "Convert HTML to PPTX (creates the actual presentation file)",
     description:
-      "THE DELIVERABLE TOOL. Renders a list of complete HTML documents (one per slide) and " +
-      "assembles them into a single PowerPoint (.pptx) file written to disk, one image-backed " +
-      "slide per HTML input, in order. Call this — not preview_slide — whenever the user asks " +
-      "for a PPT/PowerPoint/presentation/apresentação/slide deck; the tool result gives you the " +
-      "saved file path to report back to the user.",
+      "THE DELIVERABLE TOOL. You must have already written a complete HTML file (following " +
+      "get_pptx_authoring_guide's contract) to the workspace yourself — this tool does not " +
+      "render, design, or screenshot anything. It loads that HTML file in a headless browser " +
+      "only to read exact positions/styles of elements you marked with data-pptx attributes, " +
+      "and writes a native, editable .pptx built from those elements (text boxes, shapes, " +
+      "pictures — never a flattened image). Call this once the HTML is finished; the result " +
+      "includes the saved file path and any warnings about elements that didn't convert " +
+      "cleanly.",
     inputSchema: {
-      slides: z
-        .array(z.string())
-        .min(1)
-        .describe("Array of complete, self-contained HTML documents, one per slide, in order"),
+      htmlPath: z
+        .string()
+        .describe("Absolute path to the single HTML file to convert (written earlier by you)"),
       outputPath: z
         .string()
         .optional()
@@ -79,31 +54,32 @@ server.registerTool(
             "nothing is given, the file is saved in the client's workspace root (if the " +
             "client shares one) or in a configured default folder otherwise."
         ),
-      width: z.number().int().positive().optional().describe("Slide width in px (default 1280)"),
-      height: z.number().int().positive().optional().describe("Slide height in px (default 720)"),
     },
   },
-  async ({ slides, outputPath, width, height }) => {
-    const w = width ?? DEFAULT_WIDTH;
-    const h = height ?? DEFAULT_HEIGHT;
-    const resolvedPath = await resolveOutputPath(
+  async ({ htmlPath, outputPath }) => {
+    const resolvedHtmlPath = path.resolve(htmlPath);
+    if (!fs.existsSync(resolvedHtmlPath)) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `HTML file not found: ${resolvedHtmlPath}` }],
+      };
+    }
+
+    const slides = await extractPresentation(resolvedHtmlPath);
+    const resolvedOutputPath = await resolveOutputPath(
       server.server,
       outputPath,
       `apresentacao-${Date.now()}.pptx`
     );
-    const pngs: Buffer[] = [];
-    for (const html of slides) {
-      pngs.push(await renderHtmlToPng(html, w, h));
+
+    const result = await convertHtmlToPptx(slides, resolvedHtmlPath, resolvedOutputPath);
+
+    const lines = [`PPTX gerado com ${result.slideCount} slide(s) em: ${result.outputPath}`];
+    if (result.warnings.length > 0) {
+      lines.push("", "Warnings:", ...result.warnings.map((w) => `- ${w}`));
     }
-    await buildPptx(pngs, resolvedPath, w, h);
-    return {
-      content: [
-        {
-          type: "text",
-          text: `PPTX gerado com ${slides.length} slide(s) em: ${resolvedPath}`,
-        },
-      ],
-    };
+
+    return { content: [{ type: "text", text: lines.join("\n") }] };
   }
 );
 

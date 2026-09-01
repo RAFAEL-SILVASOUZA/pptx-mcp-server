@@ -1,31 +1,39 @@
 # pptx-mcp-server
 
-Servidor MCP (stdio) que renderiza slides em HTML/CSS e exporta para um arquivo PowerPoint (`.pptx`).
+Servidor MCP (stdio) que converte um arquivo HTML — escrito inteiramente pela LLM chamadora —
+em um PowerPoint (`.pptx`) **nativo e editável**. O servidor nunca gera nem embute nenhuma
+imagem/screenshot do slide inteiro; ele só usa um Chromium headless para *medir* o layout real
+(posições, fontes, cores) do HTML e converte o que foi marcado em objetos de verdade do PPTX
+(caixas de texto, formas, imagens).
 
 ## Como funciona
 
-1. Cada slide é um documento HTML completo e independente (com `<style>` inline), dimensionado
-   para o tamanho do slide (padrão 1280x720 px, 16:9).
-2. O servidor renderiza cada HTML com Chromium headless (Playwright) e captura um screenshot PNG.
-3. As imagens são montadas em um `.pptx` (via `pptxgenjs`), uma por slide, ocupando o slide inteiro.
-
-Como o slide final é uma imagem, o texto **não é editável** dentro do PowerPoint — a prioridade
-dessa abordagem é fidelidade visual ao design HTML/CSS, não edição posterior no PowerPoint.
+1. **A LLM escreve tudo.** Todo o design, conteúdo e HTML/CSS (e imagens locais, se houver) são
+   escritos pela LLM chamadora diretamente no workspace do usuário — o servidor não desenha, não
+   escolhe layout, não tem opinião de design. Ele só converte.
+2. **Contrato de marcação.** Cada slide é um elemento HTML com `data-pptx-slide`; dentro dele,
+   qualquer elemento com `data-pptx="text"`, `data-pptx="shape"` ou `data-pptx="image"` vira um
+   objeto real no `.pptx`. Tudo que não tem `data-pptx` é só andaime de layout (divs de flexbox,
+   grid, etc.) e é ignorado na conversão. Veja a tool `get_pptx_authoring_guide` para o contrato
+   completo, com exemplo.
+3. **Conversão.** O servidor abre o HTML num Chromium headless (só para ler
+   `getBoundingClientRect()`/`getComputedStyle()` de cada elemento marcado — nenhum screenshot é
+   tirado) e usa esses dados para montar o `.pptx` via `pptxgenjs`: texto vira caixa de texto
+   editável, formas viram retângulos/retângulos arredondados com fill/borda reais, imagens viram
+   objetos de imagem nativos.
 
 ## Tools expostas
 
-- `preview_slide({ html, outputPath?, width?, height? })` — **só para checagem visual**, não
-  gera uma apresentação. Renderiza um único slide e grava um PNG em disco, devolvendo apenas o
-  caminho do arquivo (texto, não base64) — abra/veja esse PNG com a capacidade de leitura de
-  imagem do seu agente para conferir o design antes de finalizar.
-- `build_pptx({ slides: string[], outputPath?, width?, height? })` — **a tool que entrega o
-  arquivo**. Renderiza todos os slides, em ordem, e grava o `.pptx` em disco.
+- `get_pptx_authoring_guide()` — devolve o guia completo de como escrever o HTML (o contrato
+  `data-pptx-slide`/`data-pptx`, o que cada tipo lê de CSS, o que não é suportado, e orientações
+  de design não-restritivas). **Chame antes de escrever qualquer HTML** — a conversão depende
+  desse contrato; HTML sem essas marcações vira um `.pptx` vazio.
+- `convert_html_to_pptx({ htmlPath, outputPath? })` — **a tool que entrega o arquivo**. Recebe o
+  caminho absoluto de um único arquivo HTML já escrito pela LLM, extrai os elementos marcados e
+  grava o `.pptx`. Devolve o caminho salvo e, se houver, avisos sobre elementos que não
+  converteram bem (tamanho zero, imagem não encontrada, slide com tamanho diferente do primeiro).
 
-Ambas devolvem só texto (o caminho salvo) — nenhuma injeta imagem em base64 na resposta. Isso
-evita respostas gigantes/ilegíveis e problemas de compatibilidade em harnesses que não renderizam
-bem blocos de conteúdo `type: "image"`.
-
-### Resolução de `outputPath` (em ambas as tools)
+### Resolução de `outputPath`
 
 1. Caminho absoluto informado → usado diretamente.
 2. Caminho relativo ou omitido → tenta a primeira `root` declarada pelo cliente MCP (se ele
