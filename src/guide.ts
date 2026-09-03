@@ -106,6 +106,48 @@ only and never itself becomes a PPTX object.
   set \`width\`/\`height\` (or let flex/grid size it) to control how large the picture
   appears.
 
+### Diagrams: \`data-pptx-mermaid\` (Mermaid → picture)
+
+For flowcharts, sequence diagrams, and other diagram types, you can hand off to
+Mermaid instead of hand-placing \`data-pptx="shape"\`/\`"text"\` boxes yourself.
+Put the Mermaid source as the element's text content (or a \`data-pptx-mermaid="..."\`
+attribute) on an element with an explicit CSS \`width\` — no \`data-pptx\` attribute
+needed, this element becomes one automatically:
+
+\`\`\`html
+<div data-pptx-mermaid style="position:absolute; left:80px; top:220px; width:700px;">
+flowchart LR
+  A[Request] --> B{Cache hit?}
+  B -- yes --> C[Return cached]
+  B -- no --> D[Compute] --> E[Store in cache] --> C
+</div>
+\`\`\`
+
+How it works: before layout is read, the server renders the diagram with a
+locally bundled copy of Mermaid (no network access, no CDN), then rasterizes
+just that element to a PNG sized to fill the box you gave it (width from your
+CSS, height following the diagram's own aspect ratio — same "set one
+dimension, let the other follow" convention as \`data-pptx="image"\`). The
+result becomes a \`data-pptx="image"\` picture, so it goes through the exact
+same PPTX embedding path as any other image.
+
+Trade-off to know: unlike \`data-pptx="shape"\`/\`"text"\` boxes, a Mermaid
+diagram is embedded as one flattened picture — not individually editable
+shapes in PowerPoint afterward. Use it when the diagram's structure (arrows,
+branching, sequencing) matters more than post-export editability; use hand-
+placed shapes/text (see the diagram patterns most authors reuse for this —
+stepper, cards, layered boxes) when the deck's visual identity needs to match
+a brand system exactly, or when the diagram must stay editable in PowerPoint.
+
+Theming: Mermaid renders with its own default look unless you tell it
+otherwise. To match your deck's palette, use Mermaid's own init directive at
+the top of the diagram source, e.g. \`%%{init: {'theme':'base', 'themeVariables':
+{'primaryColor':'#E75A1E','primaryTextColor':'#181818','lineColor':'#6B7280'}}}%%\`
+on its own line before the diagram body.
+
+A diagram with invalid Mermaid syntax, or zero rendered size, is skipped with
+a warning in the conversion result — it does not fail the rest of the deck.
+
 ### What is NOT supported
 
 CSS animations/transitions (irrelevant — only the final static layout matters),
