@@ -1,5 +1,6 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
@@ -9,12 +10,17 @@ import crypto from "node:crypto";
  * Local UMD bundle of Mermaid (defines `window.mermaid`), shipped as a
  * dependency so diagram rendering works offline and with a pinned version —
  * no CDN fetch at conversion time.
+ *
+ * Resolved via `require.resolve`, not a hand-built relative path — npm/npx
+ * routinely hoists a single-consumer dependency like this one up to a
+ * parent `node_modules` (e.g. when this package is installed as someone
+ * else's sole dependency via `npx`), so "mermaid is a sibling of dist/" is
+ * not a safe assumption. `require.resolve` walks the real Node module
+ * resolution algorithm and finds it wherever npm actually put it.
  */
-const MERMAID_BUNDLE_PATH = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "node_modules",
-  "mermaid",
+const require = createRequire(import.meta.url);
+const MERMAID_BUNDLE_PATH = path.join(
+  path.dirname(require.resolve("mermaid/package.json")),
   "dist",
   "mermaid.min.js"
 );
